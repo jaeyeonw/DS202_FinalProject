@@ -1,0 +1,1614 @@
+
+## **The Clock is Ticking: How Do Americans Spend Their Time?** 
+#### Authors: Jaeyeon Won (Project Coordinator), Becca Barrick, Jay Maxwell, Alec Meyer, and Tessa Mendoza
+
+
+## **Introduction**
+Every day, individuals in America differently allocate their time between various activities, such as work, leisure, personal care, socializing, and other activities. As understanding this individual time usage is a complicated task, exploring the their time usage as a whole can be helpful in obtaining the general picture on human activity. Practically, it could also be the most valuable resources for promoting social and economic activities performed in the United States, by providing informative analysis. With the purpose of gaining insight into how Americans spend their time, this project investigates the overall trends and patterns of their activity time use in relation to several interesting factors, using various visualizations. Specifically, we explore 7 different types of time use: 'Eating & Drinking', 'Personal Care', 'Religious & Spiritual Activities', 'Socializing, Relaxing & Leisure', 'Sports, Exercise & Recreation', 'Traveling', and 'Work & Work-Related Activities.'
+
+![*People,* 3 January. 2019, *SecretNYC*](https://offloadmedia.feverup.com/secretnyc.co/wp-content/uploads/2019/01/10132249/people-1024x597.jpg)
+
+<hr>
+
+## **Research Questions**
+To achieve our goal, we have developed five general areas of exploration with the following five research questions: 
+
+- What are the overall time usage patterns for different demographic?
+- How did the trend of time usage change over the last 15 years? 
+- How are individual's perceived life satisfaction and time usage related?
+- How are individual's general health status and time usage related? 
+- What factors are related to individual's work and travel time? 
+
+<hr>
+
+## **Overview of the Dataset**
+This section describes how we obtained and cleaned the dataset for this project.
+
+#### **Obtaining the Dataset**
+The dataset *time.cvs* comes from the *IPUMS Time Use*, a collaborative research data portal that provides demographic, socioeconomic, household, and daily time use data from survey respondents. Specifically, the dataset was extracted from the *American Time Use Survey (ATUS)* (https://timeuse.ipums.org/), which provides U.S. time diary survey data for period since 2003, using the ATUS extract builder.
+
+The extracted dataset contains 39 variables for approximately 189,866 observations collected from 2004 to 2019. 7 of them are time use variables that were used as response variables, and the other 32 are additional variables that were used to investigate the associations to the time use variables. 
+
+#### **Cleaning the Datset**
+The data cleaning process was made relatively simple by the ATUS extract builder, since we were able to export the dataset only with the necessary variables directly as a csv file. The categorical variables in the extracted dataset were encoded as numerical values. To clean this, we renamed the levels with appropriate names based on the codebook provided by the ATUS extract builder. 
+
+Our dataset and the codebook can be found at https://github.com/tessamendoza/ds202_project.git.
+
+<hr>
+
+## **Exploratory Analysis**
+
+This section explores the basic information about how demographic and living locations are associated to time usage. The demographic factors include age, gender, and race, and the geographical factors involve region and state. The analysis on associations between geography and time use does not include Alaska and Hawaii.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(ggcorrplot)
+library(ggpubr)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+time = read.csv("https://raw.githubusercontent.com/tessamendoza/ds202_project/main/time.csv")
+statecode = read.csv("https://raw.githubusercontent.com/tessamendoza/ds202_project/main/state_codes.csv")
+states = map_data('state')
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+# overall data cleaning
+statecode = statecode %>%
+  mutate(STATE = tolower(STATE))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+# clean data
+time_jaeyeon = time %>%
+  select(REGION, STATEFIP, AGE, SEX, RACE, starts_with('ACT_'))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+# Independent variables
+
+# SEX
+# Convert type
+time_jaeyeon$SEX = as.factor(time_jaeyeon$SEX)
+# Rename the levels
+levels(time_jaeyeon$SEX) =  c("Male", "Female")
+# Check new levels
+levels(time_jaeyeon$SEX)
+
+# RACE
+# Include only non-mixed races
+time_jaeyeon = time_jaeyeon %>%
+  filter(RACE %in% c(100, 110, 120, 131, 132))
+# Convert type
+time_jaeyeon$RACE = as.factor(time_jaeyeon$RACE)
+# Rename the levels
+levels(time_jaeyeon$RACE) =  c("White only", "Black only", "American Indian, Alaskan Native", "Asian only", "Hawaiian Pacific Islander only")
+# Check new levels
+levels(time_jaeyeon$RACE)
+
+# REGION
+# Convert type
+time_jaeyeon$REGION = as.factor(time_jaeyeon$REGION)
+# Rename the levels
+levels(time_jaeyeon$REGION) =  c("Northeast", "Midwest", "South", "West")
+# Check new levels
+levels(time_jaeyeon$REGION)
+
+# STATEFIP
+# Join
+time_jaeyeon = time_jaeyeon %>%
+  left_join(statecode, by = "STATEFIP" )
+# Convert type
+time_jaeyeon$STATE = as.factor(time_jaeyeon$STATE)
+# Check new levels
+levels(time_jaeyeon$STATE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+# Dependent variables
+
+# Pivot_longer
+time_jaeyeon_longer = time_jaeyeon %>%
+  pivot_longer(starts_with('ACT_'), names_to = 'TIME_ACTIVITY', values_to = 'TIME_SPENT')
+# Convert type
+time_jaeyeon_longer$TIME_ACTIVITY = as.factor(time_jaeyeon_longer$TIME_ACTIVITY)
+# Rename the levels
+levels(time_jaeyeon_longer$TIME_ACTIVITY) =  c("Eating & Drinking", 
+                                "Personal Care", 
+                                "Religious & Spiritual Activities", 
+                                "Socializing, Relaxing & Leisure", 
+                                "Sports, Exercise & Recreation", 
+                                "Traveling", 
+                                "Work & Work-Related Activities")
+# Check new levels
+levels(time_jaeyeon_longer$TIME_ACTIVITY)
+```
+
+**- How Does Time Usage Differ By Age Group?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center'}
+# Age Group
+time_jaeyeon_longer = time_jaeyeon_longer %>%
+  mutate(age_group = case_when(AGE >= 15  & AGE <= 19 ~ '15-19',
+                              AGE >= 20  & AGE <= 29 ~ '20-29',
+                              AGE >= 30  & AGE <= 39 ~ '30-39',
+                              AGE >= 40  & AGE <= 49 ~ '40-49',
+                              AGE >= 50  & AGE <= 59 ~ '50-59',
+                              AGE >= 60  & AGE <= 69 ~ '60-69',
+                              AGE >= 70  & AGE <= 79 ~ '70-79',
+                              AGE >= 80  & AGE <= 89 ~ '80-89',
+                              AGE >= 20  & AGE <= 29 ~ '20-29'))
+
+# Proportional Barplot
+time_jaeyeon_longer %>%
+  group_by(age_group, TIME_ACTIVITY) %>%
+  summarise(avg_time = mean(TIME_SPENT)) %>%
+  ggplot(aes(x = age_group, weight = avg_time, fill = TIME_ACTIVITY)) + 
+  geom_bar(position = 'fill') +
+  theme_bw() +
+  ggtitle('Proportional Barplot of Time Usage by Age Group') +
+  xlab('Activity') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(fill = 'Activity',
+       caption = 'Figure 1: Proportional Bar Graph of Average Time Spent per Day by Age Group (in minutes)') +
+  theme(plot.caption = element_text(hjust = 0.5),
+        panel.background = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+Figure 1 illustrates the proportional bar graph of American's time usage pattern by different age groups. We observe here that the amount of time used on personal care stays similar across different age groups. While Americans spend more time on eating and drinking, religious activities, and socializing as they get older, their time use on relatively active activities, such as sports, travels, and work, shows a decreasing trend as getting older.
+
+**- How Does Time Usage Differ By Gender?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center'}
+# Side by Side Barplot
+time_jaeyeon_longer %>%
+  group_by(TIME_ACTIVITY, SEX) %>%
+  summarise(avg_time = mean(TIME_SPENT)) %>%
+  ggplot(aes(x = reorder(TIME_ACTIVITY, avg_time), weight = avg_time, fill = SEX)) + 
+  geom_bar(position = 'dodge') +
+  coord_flip() +
+  theme_bw() +
+  ggtitle('Side-by-Side Barplot of Time Usage by Gender') +
+  xlab('Activity') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(fill = 'Gender',
+       caption = 'Figure 2: Side-by-Side Bar Graph of Average Time Spent per Day by Gender (in minutes)') +
+  theme(plot.caption = element_text(hjust = 0.5),
+        panel.background = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  scale_fill_manual(values = c("#00BFC4", "#F8766D"))
+```
+
+We see the time usage pattern by gender in Figure 2. Here, it is clear that both males and females spend the most time on personal care and the least time on religious activities. Looking closer, we can also see that males spend relatively more time on socializing, working, traveling, eating and drinking, and exercising than females. On the other hand, females spend more time on their personal care and religious activities than males do.
+
+**- How Does Time Usage Differ By Race?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center'}
+# Proportional Barplot
+time_jaeyeon_longer %>%
+  group_by(TIME_ACTIVITY, RACE) %>%
+  summarise(avg_time = mean(TIME_SPENT)) %>%
+  ggplot(aes(x = reorder(RACE, avg_time), weight = avg_time, fill = TIME_ACTIVITY)) + 
+  geom_bar(position = 'fill') +
+  coord_flip() +
+  theme_bw() +
+  ggtitle('Proportional Barplot of Time Usage by Race') +
+  xlab('Race') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(fill = 'Activity',
+       caption = 'Figure 3: Proportional Bar Graph of Average Time Spent per Day by Race (in minutes)') +
+  theme(plot.caption = element_text(hjust = 0.5),
+        panel.background = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+Analyzing the the relationship between race and time usage, we found the results above in Figure 3. In detail, we found that different races have a similar trend in general. However, Hawaiian Pacific islanders as well as Asians are determined to spend more time working, on average, than other races. Asians also tend to allocate more time for personal care and eating and drinking. Despite Asians' tendency to work more, they spend the least time socializing, relaxing, and doing leisure activities than other races do.
+
+**- How Does Time Usage Differ By U.S. Region?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center'}
+# time_jaeyeon_region for map
+time_jaeyeon_region = time_jaeyeon_longer %>%
+  group_by(REGION, STATE, TIME_ACTIVITY) %>%
+  summarise(avg_time = mean(TIME_SPENT)) %>%
+  mutate(STATE = tolower(STATE)) %>%
+  left_join(states %>%
+              select(-subregion), 
+            by = c('STATE' = 'region'))
+
+# time_jaeyeon_region_text for map
+time_jaeyeon_region_text = time_jaeyeon_longer %>%
+  group_by(REGION, TIME_ACTIVITY) %>%
+  summarise(avg_time = mean(TIME_SPENT))
+
+# Map
+time_jaeyeon_region %>%
+  ggplot(aes(x = long, y = lat, fill = REGION)) +
+  geom_polygon(aes(group = group)) +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  annotate(geom = "text", x = -75, y = 42.5, label = "Northeast", size = 4.5, fontface = "bold") +
+  annotate(geom = "text", x = -95, y = 42.5, label = "Midwest", size = 5, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 33.7, label = "South", size = 5, fontface = "bold") +
+  annotate(geom = "text", x = -113.5, y = 41, label = "West", size = 5, fontface = "bold") +
+  annotate("label", x = -53, y = 43, size = 3,
+           label = "NORTHEAST \nEating & Drinking: 70.19 \nPersonal Care: 568.13 \nReligious Activities: 10.39 \nRelaxing & Leisure: 300.83 \nSports & Exercise: 19.40 \nTraveling: 74.21 \nWork Activities: 155.67") +
+  annotate("label", x = -92, y = 55, size = 3,
+           label = "MIDWEST \nEating & Drinking: 66.72 / Personal Care: 569.14 \nReligious Activities: 10.98 / Relaxing & Leisure: 299.32 \nSports & Exercise: 20.13 / Traveling: 69.28 \nWork Activities: 163.97") +
+  annotate("label", x = -68, y = 28.8, size = 3,
+           label = "SOUTH \nEating & Drinking: 64.15 \nPersonal Care: 583.75 \nReligious Activities: 16.26 \nRelaxing & Leisure: 302.88 \nSports & Exercise: 17.45 \nTraveling: 70.56 \nWork Activities: 155.97") +
+  annotate("label", x = -134, y = 42, size = 3,
+           label = "WEST \nEating & Drinking: 71.01 \nPersonal Care: 578.03 \nReligious Activities: 10.89 \nRelaxing & Leisure: 279.29 \nSports & Exercise: 22.41 \nTraveling: 72.58 \nWork Activities: 159.20") +
+  labs(title = 'Map of the U.S. Regions with Average Time Spent on Each Activity Per Day',
+       caption = 'Figure 4: Map of Average Time Spent per Day by Region (in minutes)',
+       fill = 'Region') +
+  theme(plot.caption = element_text(hjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+In terms of the geographical relations to American's time use pattern, we firstly looked at the regions in the United States, which are divided into the four following areas: West, Midwest, Northeast, and South. Based on Figure 4, we observe that people in the West tend to eat and drink the most (71 minutes per day) while the people in the South spend the least time on this activity (64 minutes per day). Similarly, Western people spend around 22 minutes per day on sports, exercise, and recreation, as the leading active region, whereas the Southern people spend the least amount of time (17 minutes per day). On the contrary, these two regions show an opposite pattern in terms of the socializing, relaxing, and leisure activities. For example, Southern residents spend the most time (302 minutes per day) for these activities, whereas the Western people spend the least time (279 minutes per day). Regarding personal care and religious activities, both activities are the most popular in the South while they are both the least popular in the Northeast. The residents in the Midwest are the most hard-working people, while they spend the least time traveling. Unlike from the Midwestern people, the Northeast spends the least time on work-related activities and the most time traveling.
+
+**- How Does Time Usage Differ By State?**
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results=FALSE}
+# time_jaeyeon_state for map
+time_jaeyeon_state = time_jaeyeon_longer %>%
+  group_by(STATE, TIME_ACTIVITY) %>%
+  summarise(avg_time = mean(TIME_SPENT)) %>%
+  mutate(STATE = tolower(STATE)) %>%
+  left_join(states %>%
+              select(-subregion), 
+            by = c('STATE' = 'region'))
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+# Eating & Drinking
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Eating & Drinking') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Eating & Drinking Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 5: Map of Average Time Spent on Eating & Driking by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "red2") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+
+# Personal Care
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Personal Care') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Personal Care Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 6: Map of Average Time Spent on Personal Care by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "deepskyblue4") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+# Religious & Spiritual Activities
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Religious & Spiritual Activities') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Religious & Spiritual Activities Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 7: Map of Average Time Spent on Religious & Spiritual Activities Care by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "darkorange2") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+
+# Socializing, Relaxing, & Leisure
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Socializing, Relaxing & Leisure') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Socializing, Relaxing & Leisure Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 8: Map of Average Time Spent on Socializing, Relaxing & Leisure by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "violetred3") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+# Sports, Exercise, & Recreation
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Sports, Exercise & Recreation') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Sports, Exercise & Recreation Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 9: Map of Average Time Spent on Sports, Exercise & Recreation by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "mediumblue") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+
+# Traveling
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Traveling') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Traveling Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 10: Map of Average Time Spent on Traveling by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "darkgreen") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center', fig.show="hold", out.width="50%"}
+# Work & Work-Related Activities
+time_jaeyeon_state %>%
+  filter(TIME_ACTIVITY == 'Work & Work-Related Activities') %>%
+  ggplot(aes(x = long, y = lat, fill = avg_time)) +
+  geom_polygon(aes(group = group)) +
+  geom_path(aes(group = group), color = 'black') +
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Time Spent on Work & Work-Related Activities Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 11: Map of Average Time Spent on Work & Work-Related Activities by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "coral4") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+```
+
+Different time use patterns by state for various types of activities are shown in the 7 maps above. The states with more time spent on each activity are colored in darker colors, and the states with less time spent are colored in brighter colors. 
+
+Comparing the eating and drinking activities and personal care activities, we observe that Vermont, on average, spend the most time eating and drinking and the least time on personal care. On the other hand, Mississippi shows the exact opposite pattern that they spend the most time on personal care and the least time eating and drinking. Similarly, Work-related activities and socializing activities show an opposite trend by state. The states, such as North Dakota, Wyoming, and Colorado, where the work-related activities were the most active time use, spend the least time on socializing activities. Conversely, the states, such West Virginia, Louisiana, Mississippi, and Alabama, where they spend the most time on socializing activities were determined to spend the least time on work-related activities. In terms of the religious and spiritual activities, Mississippi, Alabama, South Carolina, and Utah spend the most time while some of the states in the Northeast region spend the least amount of time. The sports and exercise are the most popular activities in Vermont and Montana. The people in DC and Maryland tend to like to travel the most while the people in Louisiana and Mississippi tend to not.
+
+<hr>
+
+## **Time Usage Over Time**
+
+This part of the paper investigates how the time usage pattern has changed over the last 15 years from 2004 to 2019. We specifically analyzed the time use trend of the religious and spiritual activities as well as the work and work-related activities.
+
+**- Has time spent engaged in religious and spiritual activities changed over the last 15 years?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time %>% 
+  rename(religion = ACT_RELIG) %>%
+  ggplot(time, mapping = aes(x = YEAR, y = religion)) +
+  geom_point() +
+  theme_bw() +
+  xlab('Year') +
+  ylab('Total Time Spent per Day (in minutes)') +
+  labs(title = 'Time Usage Trend on Religious & Spiritual Activities (2004 - 2019)',
+       caption = 'Figure 12: Time Usage Trend on Religious & Spiritual Activities (2004 - 2019)')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Figure 12 shows the the amount of time people spend participating in religious activities. Here, we see that it has remained stable since 2004. Every year, the majority is just below 500 minutes per day with a few outliers that spend much larger amounts of time, even going to 1000 minutes per day. Numbers have been relatively lower since 2013. 
+
+**- Are Americans working more or less than they used to?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+ggplot(time, mapping = aes(x = YEAR, y = ACT_WORK)) + 
+  geom_point() + 
+  theme_bw() +
+  xlab('Year') +
+  ylab('Total Time Spent per Day (in minutes)') +
+  labs(title = 'Time Usage Trend on Work & Work-Related Activities (2004 - 2019)',
+       caption = 'Figure 13: Time Usage Trend on Work & Work-Related Activities (2004 - 2019)')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+According to Figure 13, the time spent working has also remained pretty stable since 2004. Most people spend at least 1000 minutes a day at work and many people spend up to 1500 minutes a day working. We did some math and realized that 1000 minutes a day equates to over 16.5 hours a day. This data set considers "work" to be activities physically at work, completing any work activities like going to lunch or playing golf with a client, doing anything that makes you money, applying for jobs or interviewing, and many other activities. Obviously not everyone works every single day for that long due to holidays, appointments, and vacations, but 16.5 hours a day is a baseline for lots of people in America. There is a slight dip in minutes worked in 2013, 2016, and 2018. There are many people spending zero minutes working per day which could be because of unemployed adults or children, as this data set includes people as young as 15.
+
+**- How has time spent working changed in various regions of the U.S.?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time$SEX <- factor(time$SEX, levels = c(1, 2), 
+                 labels = c("M", "F"))
+
+time$REGION <- factor(time$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+
+ggplot(time, aes(x = YEAR, y = ACT_WORK, fill = SEX)) + 
+  facet_grid(~REGION) + 
+  geom_bar(stat = 'identity') +
+  theme_bw() +
+  xlab('Year') +
+  ylab('Total Time Spent per Day (in minutes)') +
+  labs(title = 'Time Usage Trend on Work & Work-Related Activities (2004 - 2019)',
+       caption = 'Figure 14: Time Usage Trend on Work & Work-Related Activities by Region and Gender  (2004 - 2019)',
+       fill = 'Gender')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+We also explored the work-related activity time use by region and gender, as shown in Figure 14. Across all regions, minutes per day spent working has been steadily decreasing since 2004. The decline seems to be similar across all regions, with no region seeing a more significant change than any other. The region with the people who work the most is the south. Again, work isn't only the traditional 9-5 in this data set- it includes any work related activities that can make money, applying/interviewing for jobs, or reading things for work at home. People in the south spend more time working than any other region by quite a significant amount. The midwest and the west have people who work similar amounts, and the northeast is where people spend the least amount of time working. We also included gender in my analysis. From what this plot shows, men and women work similar amounts in every region and they are both experiencing the same decline in time spent working since 2004.
+
+<hr>
+
+## **Life Satisfaction & Time Usage**
+
+This part of analysis shows American's life satisfaction with respect to their time allocation between different types of activities, especially focusing on the work and social activities.
+
+**- How are each type of activities related to life satisfaction?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+time1 <- time %>%
+  group_by(WBLADDER, REGION, ACT_FOOD, ACT_PCARE, ACT_RELIG, ACT_SOCIAL, ACT_SPORTS, ACT_TRAVEL, ACT_WORK) %>%
+  summarise(num = n()) %>%
+  filter(WBLADDER != 999) 
+
+time1$WBLADDER <- factor(time1$WBLADDER, labels = c("Worst", "Horrible", "Bad", "Sucks", "Alright", "Fine", "Good", "Great", "Amazing", "Greatest", "Best"))
+time1$REGION <- factor(time1$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_FOOD)) + geom_bar(fill = 'red2', stat = "summary", fun.y = "mean")  +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Eating & Drinking',
+       caption = "Figure 15: American's Satisfaction on Eating & Drinking")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_PCARE)) + geom_bar(fill = 'deepskyblue4', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Personal Care',
+       caption = "Figure 16: American's Satisfaction on Personal Care")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_RELIG)) + geom_bar(fill = 'darkorange2', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Religious & Spiritual Activities',
+       caption = "Figure 17: American's Satisfaction on Religious & Spiritual Activities")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_SOCIAL)) + geom_bar(fill = 'violetred3', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Socializing, Relaxing & Leisure',
+       caption = "Figure 18: American's Satisfaction on Socializing, Relaxing & Leisure")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_SPORTS)) + geom_bar(fill = 'mediumblue', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Sports, Exercise & Recreation',
+       caption = "Figure 19: American's Satisfaction on Sports, Exercise & Recreation")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_TRAVEL)) + geom_bar(fill = 'darkgreen', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Traveling',
+       caption = "Figure 20: American's Satisfaction on Traveling")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='center', fig.show="hold", out.width="50%"}
+ggplot(time1, aes(x = WBLADDER, y = ACT_WORK)) + geom_bar(fill = 'coral4', stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction on Work & Work-Related Activities',
+       caption = "Figure 21: American's Satisfaction on Work & Work-Related Activities")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Each of these above graphs shows the average minutes of time at each life quality that people reported for the activity. The most interesting graph of these is the religious activities. There is a large drop off from the first bar where we would assume people are being forced to attend religious activities. Another interesting set would be the personal care graph. Personal care includes sleep which will take up most of the personal care time. Based on this it shows that the more you sleep the lower your life satisfaction.
+
+**- Which region in the U.S. has the highest / lowest life satisfaction?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time3 <- time %>%
+  filter(WBLADDER != 999)
+
+satByState <- time3 %>%
+  group_by(STATEFIP) %>%
+  summarize(avgSat = mean(WBLADDER)) %>%
+  left_join(statecode, by = c("STATEFIP" = 'STATEFIP'))
+stateMap <- states %>%
+  left_join(satByState, by = c('region' = 'STATE'))
+
+ggplot(stateMap %>% 
+         group_by(region), 
+       aes(x=long, y=lat, fill = avgSat)) + 
+  geom_polygon(aes(group=group), color = "black") + 
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Satisfaction (1 - 10) By State',
+       fill = 'Satisfaction \n(1 - 10)',
+       caption = 'Figure 22: Map of Average Life Satisfaction by State') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "#992222") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+
+satByState %>%
+  arrange((avgSat))
+```
+
+Based on Figure 22, most of the regions seem to show a fairly equal life satisfaction. However, Vermont, Idaho, New Mexico, and South Dakota are the most satisfied states with the average satisfaction rating of around 7.4 - 7.5. On the other hand, DC, Utah, Wyoming, Nevada, and New Jersey are the lesat satisfied states with the average life satisfaction rating of around 6.7 - 6.8.
+
+**- Which region spends the most time working?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time4 <- time %>%
+  filter(ACT_WORK != 0)
+
+time4$REGION <- factor(time4$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+
+ggplot(time4, aes(x = REGION, y = ACT_WORK, fill = REGION)) + geom_bar(stat = "summary", fun.y = "mean") +
+  theme_bw() +
+  xlab('Region') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Average Time Spent on Work & Work-Related Activities by Region',
+       caption = "Figure 23: Average Time Spent on Work & Work-Related Activities by Region",
+       fill = 'Region')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+According to Figure 23, where it shows the time use trend by region, it is easy to see that all of the regions work for a similar amount of time per day. However, the South is determined to be the highest working region with whereas the Northeast and West are the lowest working regions.
+
+**- Which region is the most social? Does this correspond with life satisfaction?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time5 <- time 
+
+SocByState <- time5 %>%
+  group_by(STATEFIP) %>%
+  summarize(statecode = mean(ACT_SOCIAL)) %>%
+  left_join(statecode, by = c("STATEFIP" = 'STATEFIP'))
+stateMap <- states %>%
+  left_join(SocByState, by = c('region' = 'STATE'))
+
+ggplot(time1, aes(fill = REGION, x = WBLADDER, y = ACT_SOCIAL)) + geom_bar(stat = "summary", fun.y = "mean", position = "dodge") +   
+  labs(x = "Satisfaction", y = "Total Minutes", title = "Social Activites by Region") +
+  theme_bw() +
+  xlab('Satisfaction') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Overall Satisfaction by Region',
+       caption = "Figure 24: American's Satisfaction by Region",
+       fill = 'Region')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Figure 24 describes the relationship between the average time spent on social activities per day and the overall life satisfaction by region. Here, we observe that the West is the least social by far. This doesn't necessarily correspond to life satisfaction and the west was equally satisfied compared to the other states.
+
+<hr>
+
+## **Health & Time Usage**
+
+#### **Physical Activity**
+
+The data provided in this dataset includes individuals ranging from 15-85 years of age. Specifically, this section of analysis explores the 'Sports' time use variable, which highlights the amount of time an individual spends on sports, exercise, and recreation in a day. This will be referenced as physical activity in the future.
+
+**- Which age range spends the most time engaging in physical activity?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+age <- time %>% 
+  mutate(agegroup = case_when(AGE >= 15  & AGE <= 19 ~ '15-19',
+                              AGE >= 20  & AGE <= 29 ~ '20-29',
+                              AGE >= 30  & AGE <= 39 ~ '30-39',
+                              AGE >= 40  & AGE <= 49 ~ '40-49',
+                              AGE >= 50  & AGE <= 59 ~ '50-59',
+                              AGE >= 60  & AGE <= 69 ~ '60-69',
+                              AGE >= 70  & AGE <= 79 ~ '70-79',
+                              AGE >= 80  & AGE <= 89 ~ '80-89',
+                              AGE >= 20  & AGE <= 29 ~ '20-29'))
+
+sportsByAge <- age %>%
+  group_by(agegroup) %>%
+  summarise(avg_time = mean(ACT_SPORTS))
+
+ggplot(sportsByAge, aes(x = agegroup, y = avg_time, fill = agegroup)) + geom_bar(stat = 'identity')  +
+  theme_bw() +
+  xlab('Age') +
+  ylab('Average Time Spent per Day (in minutes)') +
+  labs(title = 'Average Active Time by Age',
+       caption = "Figure 25: Average Active Time Spent by Age Group",
+       fill = 'Age Group')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Based on Figure 25, the 15-19 year old group spends, on average, the greatest time doing sports, exercise and recreation - over double the amount of time compared to every other age group. Activity level tends to decline as age increases. 
+
+**- Does time spent engaging in physical activity vary by state?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+statecode <- statecode %>%
+  mutate(STATE = tolower(STATE))
+
+sportsByState <- age %>%
+  group_by(STATEFIP) %>%
+  summarize(avgTime = mean(ACT_SPORTS)) %>%
+  left_join(statecode, by = c("STATEFIP" = 'STATEFIP'))
+
+stateMap <- states %>%
+  left_join(sportsByState, by = c('region' = 'STATE'))
+
+ggplot(stateMap %>% group_by(region), aes(x=long, y=lat, fill = avgTime)) + 
+  geom_polygon(aes(group=group), color = "black") + 
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Active Time Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 26: Map of Average Active Time Per Day by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "mediumblue") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+mostActive5 <- sportsByState %>%
+  arrange(desc(avgTime)) %>%
+  head(5)
+mostActive5
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+leastActive5 <- sportsByState %>%
+  arrange(avgTime) %>%
+  head(5)
+leastActive5
+```
+
+The plot above (Figure 26) utilized state data from the R package 'mapdata,' joined with a column of state names and codes (generated by the extract builder and found in the GitHub Repository). As shown in the map, physical activity does vary by state. In general, the Northwest regions are among the most active, while states in the south (especially southeast) are less active. The five most active states are Vermont, Montana, Hawaii, Wyoming, and Colorado  - each averaging between 25 and 30 active minutes per day. The least active states are Delaware, Alabama, Mississippi, South Carolina, and Louisiana - each averaging between 13 and 16 active minutes per day.
+
+**- Do activity levels among youth (individuals under 20) vary by state?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+youthByState <- age %>%
+  filter(AGE <= 20) %>%
+  group_by(STATEFIP) %>%
+  summarize(avgTime = mean(ACT_SPORTS)) %>%
+  left_join(statecode, by = c("STATEFIP" = 'STATEFIP'))
+
+youthStateMap <- states %>%
+  left_join(youthByState, by = c('region' = 'STATE'))
+
+ggplot(youthStateMap %>% group_by(region), aes(x=long, y=lat, fill = avgTime)) + 
+  geom_polygon(aes(group=group), color = "black") + 
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Youth (under 20) Average Active Time Per Day (in minutes)',
+       fill = 'Average Time \n(in minutes)',
+       caption = 'Figure 27: Map of Youth Average Active Time Per Day by State (in minutes)') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_gradient(low = "white", high = "mediumblue") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+  
+```
+
+According to Figure 27, states in the Midwest and Northwest tend to have more active youth than states in the Southwest and Southeast regions. Vermont has the most active youth.
+
+#### **BMI**
+
+BMI, or Body Mass Index, is a measure of body fat based on height and weight that is commonly used in the healthcare setting. The BMI data was recorded in the ATUS survey series between 2006-2008 and 2014-2016. The BMI ranges (underweight, normal, overweight, and obese), are determined according to the Centers for Disease Control (CDC) standard. It is important to note that BMI is NOT the most accurate predictor of health status, however, it is a useful tool and provides a general marker for individual health, especially on a large-scale level. More information on BMI can be found on the CDC's website (see works cited section for link).
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+bmi <- age %>%
+  filter(YEAR == 2006 | YEAR == 2007 | YEAR == 2008 |
+           YEAR == 2014 | YEAR == 2015 | YEAR == 2016) %>%
+  filter(!is.na(BMI)) %>%
+  filter(BMI < 500)
+
+bmi$bmiStatus <- ifelse(bmi$BMI < 18.5, "underweight", 
+                        ifelse(bmi$BMI < 25, "normal",
+                        ifelse(bmi$BMI < 30, "overweight", 
+                               "obese")))
+
+ggplot(bmi, aes(x = BMI, fill = bmiStatus, color = bmiStatus)) + 
+  geom_histogram(position = 'identity', bins = 30, alpha = 0.5) + 
+  theme_bw() +
+  scale_fill_manual(values = c("#28C40C", "#DE2905", "#E8A201", "#8E9CA1")) +
+  scale_color_manual(values = c("#28C40C", "#DE2905", "#E8A201", "#8E9CA1")) +
+  xlab('BMI') +
+  ylab('Number of Respondents') +
+  labs(title = 'Distribution of BMI',
+       caption = "Figure 28: Distribution of BMI Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Figure 28 shows the distribution of BMI's among individuals. BMI status was calculated using the CDC standard and was manually added to the dataset. The most frequent BMI values occur at the higher end of the normal range and at the lower end of the overweight category. 
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+bmiByState <- bmi %>%
+  group_by(STATEFIP) %>%
+  summarize(avg_BMI = mean(BMI)) %>%
+  left_join(statecode, by = c("STATEFIP" = 'STATEFIP'))
+
+bmiStateMap <- states %>%
+  left_join(bmiByState, by = c('region' = 'STATE'))
+
+ggplot(bmiStateMap %>% group_by(region), aes(x=long, y=lat, fill = avg_BMI)) + 
+  geom_polygon(aes(group=group), color = "black")+ 
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme_map() +
+  labs(title = 'Average Body Mass Index (BMI) by State',
+       fill = 'Average BMI',
+       caption = 'Figure 29: Map of Average Body Mass Index (BMI) by State') +
+  theme(legend.position = c(0.85, 0.2),
+        legend.background = element_rect(linetype = "solid", colour ="black"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_viridis_c(option = "C") +
+  annotate(geom = "text", x = -120, y = 47.5, label = "WA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -120.5, y = 44, label = "OR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -119.8, y = 37, label = "CA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -114.5, y = 43.8, label = "ID", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -116.8, y = 39.6, label = "NV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 39.4, label = "UT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -111.5, y = 34.5, label = "AZ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -109, y = 47, label = "MT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -107.5, y = 43, label = "WY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -105.5, y = 39, label = "CO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -106, y = 34.5, label = "NM", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.7, y = 47.5, label = "ND", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100.5, y = 44.5, label = "SD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -100, y = 41.5, label = "NE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -98.8, y = 38.5, label = "KS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -96.5, y = 35.5, label = "OK", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -99.5, y = 31.5, label = "TX", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -94.5, y = 46, label = "MN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -93.3, y = 42.2, label = "IA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 38.5, label = "MO", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.5, y = 35, label = "AR", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -92.6, y = 31.3, label = "LA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -90, y = 45, label = "WI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89, y = 40, label = "IL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -89.5, y = 33, label = "MS", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.8, y = 43.5, label = "MI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86, y = 40, label = "IN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -84.5, y = 37.7, label = "KY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.3, y = 35.8, label = "TN", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -86.7, y = 33, label = "AL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -82.7, y = 40.3, label = "OH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -83.3, y = 32.8, label = "GA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -81.5, y = 28.5, label = "FL", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -77.8, y = 40.9, label = "PA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 38.5, label = "WV", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -78.5, y = 37.5, label = "VA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -79.5, y = 35.7, label = "NC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -80.8, y = 34, label = "SC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -75, y = 43, label = "NY", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -69, y = 45.5, label = "ME", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74.5, y = 36.5, label = "DC", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -74, y = 37.5, label = "MD", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73.8, y = 38.5, label = "DE", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -73, y = 39.5, label = "NJ", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72, y = 40.2, label = "CT", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -70.5, y = 40.7, label = "RI", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.5, y = 42, label = "MA", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -68.8, y = 43.2, label = "NH", size = 3, fontface = "bold") +
+  annotate(geom = "text", x = -72.5, y = 45.8, label = "VT", size = 3, fontface = "bold")
+
+```
+
+This BMI map was made, using ggplot, by combining average BMI data for each state with an imported 'state' map (mentioned above). Colorado and Vermont have the healthiest individuals according to BMI, with the West coast, Northeast, and Florida following closely behind. The Midwest has a higher BMI and South regions have higher BMI, as does West Virginia.
+
+#### **General Health**
+
+One of the variables within the dataset contains self-reported general health status from the survey respondents. The participants were asked to rate their general health as "Excellent," "Very good," "Good," "Fair," or "Poor." Some participants did refuse to answer and others responded "Don't know."
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+health <- bmi %>%
+  filter(!is.na(GENHEALTH)) %>%
+  filter(GENHEALTH != 99)
+health$GENHEALTH <- factor(health$GENHEALTH, levels = c(1, 2, 3, 4, 5, 96, 97), 
+                     labels = c("Excellent", "Very good", "Good", "Fair", "Poor", "Refused", "Don't know"))
+
+ggplot(health, aes(x = GENHEALTH, fill = GENHEALTH)) + 
+  geom_bar() +
+  theme_bw() +
+  xlab('General Health') +
+  ylab('Number of Respondents') +
+  labs(title = 'Distribution of Self-Reported General Health Status',
+       caption = "Figure 30: Distribution of Self-Reported General Health Status",
+       fill = 'Health Status')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+The general distribution is as shown above in Figure 30: A majority of respondents consider themselves in 'very good' or 'good' health. Interestingly, this slightly contradicts the BMI, objective measurement of health, where a larger majority of individuals are categorized as 'overweight.'
+
+**- How does an individual's health (BMI and general health) relate to the amount of time they spend being physically active?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+bmiStatus <- bmi %>%
+  mutate(bmiStatus = fct_relevel(bmiStatus, 
+                            "underweight", "normal", "overweight", "obese")) %>%
+  group_by(bmiStatus) %>%
+  summarise(avg_active = mean(ACT_SPORTS))
+
+ggplot(bmiStatus, aes(x = bmiStatus, y = avg_active, fill = bmiStatus)) + 
+  geom_bar(stat = 'identity') +
+  theme_bw() +
+  xlab('BMI Status') +
+  ylab('Average Active Time per Day (in minutes)') +
+  labs(title = 'Activity Levels by BMI Status',
+       caption = "Figure 31: Activity Levels by BMI Status",
+       fill = 'BMI Status')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+healthTable <- health %>%
+  group_by(GENHEALTH) %>%
+  summarise(avg_time = mean(ACT_SPORTS))
+
+ggplot(healthTable, aes(x = GENHEALTH, y = avg_time, fill = GENHEALTH)) + 
+  geom_bar(stat = 'identity') +
+  theme_bw() +
+  xlab('General Health') +
+  ylab('Average Active Time per Day (in minutes)') +
+  labs(title = 'Average Active Time by General Health Status',
+       caption = "Figure 32: Average Active Time by General Health Status",
+       fill = 'Health Status')  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+Figure 31 and Figure 32 show the average active time per day by BMI status and by General health status, respectively. Here, there is a general positive correlation between an individual's amount of activity time and their perceived health level. That is, those who consider themselves in good health tend to be more active. 
+
+<hr>
+
+## **Work-Life Balance**
+
+The last section of this report provides insight about how Americans balance their work and other activities in relation to the presence of children. We specifically focused on finding the relationship between work and travel, religious activities, and social activities.
+
+**- How does the presence or lack of children affect time-use?**
+
+In order to better visualize how the data is shaped between respondents with children and those without, we created discrete bins of the time data for several categories: Time spent working, time spent traveling, time spent in religious activities, and time spent in social activities. We tried to break the discrete time values up into units which we felt reasonable, based on some quick data explorations when we first received the data set. We also changed the 1 or 0 values under the "Children in the household" variable, HH_CHILD, to "children" and "no children."
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+#load data
+# change the 0/1 option for kids / no kids into a useful factor
+time_jay <- time %>% mutate(kids = factor(ifelse(HH_CHILD==1,'children','no children')))
+
+# we are going to bin the data of our time use data for analysis
+
+breaks <- c(0,240,480,720,Inf)
+labels <-c("0-3.99 hours", "4-7.99 hours", "8-11.99 hours", "12+ hours")
+time_jay$work_time_bins <- cut(time_jay$ACT_WORK, breaks = breaks, labels = labels, right=FALSE)
+
+breaks <- c(0,120,240,360,480,Inf)
+labels <-c("0-1.99 hours", "2-3.99 hours", "4-5.99 hours", "6-7.99 hours","8+ hours")
+time_jay$travel_time_bins <- cut(time_jay$ACT_TRAVEL, breaks = breaks, labels = labels, right=FALSE)
+
+
+breaks <- c(0,30,60,90,Inf)
+labels <-c("0-29 minutes", "30-59 minutes", "60-89 minutes", "90+ minutes")
+time_jay$relig_time_bins <- cut(time_jay$ACT_RELIG, breaks = breaks, labels = labels, right=FALSE)
+
+breaks <- c(0,60,120,180,240,Inf)
+labels <-c("0-59 minutes", "60-119 minutes", "120-179 minutes", "180-239 minutes"," 240+ minutes")
+time_jay$social_time_bins <- cut(time_jay$ACT_SOCIAL, breaks = breaks, labels = labels, right=FALSE)
+```
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+time_jay %>% 
+  group_by(kids, work_time_bins) %>% 
+  summarize(n = n(), mean_work_minutes = mean(ACT_WORK)) %>%
+  ggplot(aes(x=work_time_bins, y=mean_work_minutes)) + 
+  geom_linerange(aes(x=work_time_bins, ymin=0, ymax=mean_work_minutes, group=kids), 
+                 color="lightgray", 
+                 position=position_dodge(0.3), 
+                 size=1.5) + 
+  geom_point(aes(color=kids), position=position_dodge(0.3), size=3) + 
+  theme_bw() +
+  xlab('Binned Working Time (in hours)') +
+  ylab('Average Time per Day (in minutes)') +
+  labs(title = 'Average Time Spent on Work Activities by Children Status',
+       caption = "Figure 33: Average Time Spent on Work Activities by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+time_jay %>% 
+  group_by(kids, travel_time_bins) %>% 
+  summarize(n = n(), mean_travel_minutes = mean(ACT_TRAVEL)) %>%
+  ggplot(aes(x=travel_time_bins, y=mean_travel_minutes)) + 
+  geom_linerange(aes(x=travel_time_bins, ymin=0, ymax=mean_travel_minutes, group=kids), 
+                 color="lightgray", 
+                 position=position_dodge(0.3), 
+                 size=1.5) + 
+  geom_point(aes(color=kids), position=position_dodge(0.3), size=3) +
+  theme_bw() +
+  xlab('Binned Traveling Time (in hours)') +
+  ylab('Average Time per Day (in minutes)') +
+  labs(title = 'Average Time Spent on Travel Activities by Children Status',
+       caption = "Figure 34: Average Time Spent on Travel Activities by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+
+time_jay %>% 
+  group_by(kids, relig_time_bins) %>% 
+  summarize(n = n(), mean_relig_minutes = mean(ACT_RELIG)) %>%
+  ggplot(aes(x=relig_time_bins, y=mean_relig_minutes)) + 
+  geom_linerange(aes(x=relig_time_bins, ymin=0, ymax=mean_relig_minutes, group=kids), 
+                 color="lightgray", 
+                 position=position_dodge(0.3), 
+                 size=1.5) + 
+  geom_point(aes(color=kids), position=position_dodge(0.3), size=3) + 
+  theme_bw() +
+  xlab('Binned Religious Time (in minutes)') +
+  ylab('Average Time per Day (in minutes)') +
+  labs(title = 'Average Time Spent on Religious Activities by Children Status',
+       caption = "Figure 35: Average Time Spent on Religious Activities by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+time_jay %>% 
+  group_by(kids, social_time_bins) %>% 
+  summarize(n = n(), mean_social_minutes = mean(ACT_SOCIAL)) %>%
+  ggplot(aes(x=social_time_bins, y=mean_social_minutes)) + 
+  geom_linerange(aes(x=social_time_bins, ymin=0, ymax=mean_social_minutes, group=kids), 
+                 color="lightgray", 
+                 position=position_dodge(0.3), 
+                 size=1.5) + 
+  geom_point(aes(color=kids), position=position_dodge(0.3), size=3) +
+  theme_bw() +
+  xlab('Binned Social Time (in minutes)') +
+  ylab('Average Time per Day (in minutes)') +
+  labs(title = 'Average Time Spent on Social Activities by Children Status',
+       caption = "Figure 36: Average Time Spent on Social Activities by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+The graphs above (Figure 33 through Figure 36) show the average amount of time spent for each type of activity by different blocks of time span and by the presence of children. Figure 33 appears to indicate that for the most parts across our time-worked bins, both households with and without children have similar mean minutes spent working per day. Based on Figure 34, it seems to indicate that family with children report slightly more time spent traveling than the no children group. Figure 35 shows roughly equal time spent between those with and without children, except in the 90+ minute block, which shows a higher mean for those with no children. The last plot (Figure 36) is about time spent in social activities between those with and without children. In the first four time categories, the mean time spent in social activity is roughly equal across the households with and without children, but in the last time block, there is a clear difference in the means between those with and those without children. 
+
+**- How does an individual's work time correlate to their other activities?**
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, results=FALSE, fig.align='center'}
+time_jay %>%  
+  ggplot(aes(x=ACT_WORK, y=ACT_TRAVEL, color = kids)) + 
+  geom_point() +
+  theme_bw() +
+  xlab('Time Spent Working (in minutes)') +
+  ylab('Time Spent Traveling (in minutes)') +
+  labs(title = 'Scatterplot of Time Spent Working VS. Traveling by Children Status',
+       caption = "Figure 37: Scatterplot of Time Spent Working VS. Traveling by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+The scatterplot of the amount of time spent working versus that of traveling by the presence of children in the family is shown in Figure 37. Overall, it attempts to describe the pattern that the people who work harder spend less time traveling, regardless of the presence of children. Similarly, the people who do not allocate much time working tend to spend more time traveling.
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+time_jay %>%  ggplot(aes(x=ACT_WORK, y=ACT_TRAVEL, color = kids)) + 
+  geom_smooth(method=lm) +
+  coord_cartesian(ylim=c(40,100),xlim=c(0,1400)) +
+  theme_bw() +
+  xlab('Time Spent Working (in minutes)') +
+  ylab('Time Spent Traveling (in minutes)') +
+  labs(title = 'Time Spent Working VS. Traveling by Children Status',
+       caption = "Figure 38: Time Spent Working VS. Traveling by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+time_jay %>%  ggplot(aes(x=ACT_WORK, y=ACT_SOCIAL, color = kids)) + 
+  geom_smooth(method=lm) + 
+  coord_cartesian(ylim=c(0,400),xlim=c(0,1400)) +
+  theme_bw() +
+  xlab('Time Spent Working (in minutes)') +
+  ylab('Time Spent on Social Activities (in minutes)') +
+  labs(title = 'Time Spent Working VS. Social Activities by Children Status',
+       caption = "Figure 39: xTime Spent Working VS. Social Activities by Children Status")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+To better estimate how respondents use their time, and to look for signs of interaction or correlation between different activities, we used a regression line on our data. In detail, the plots have the work time on x-axis and other activity time on y-axis. And the lines are divided into 2 lines, one corresponding to children, and the other one corresponding to no children. Based on Figure 38, where it shows the relationship between travel time and work time, we see that respondents with children report about the same amount of travel time as time spent working increases. However, for the respondents with no children, there is a  steeper slope indicating that more time working might correlate to more time spent traveling. Looking at Figure 39, we observe among both respondents with children and those without, as minutes work increases, the amount of social time decreases.
+
+```{r, echo=FALSE, message = FALSE, warning = FALSE, fig.align='default', fig.show="hold", out.width="50%"}
+time_jay %>% 
+  filter(kids=="no children") %>% 
+  select(ACT_WORK, ACT_SOCIAL, ACT_TRAVEL, ACT_RELIG) %>% 
+  cor() %>% 
+  ggcorrplot(method="square", lab=TRUE) + 
+  theme_bw() +
+  xlab(' ') +
+  ylab(' ') +
+  labs(title = 'Correlation Matrix of Activities - No Children',
+       caption = "Figure 40: Correlation Matrix of Activities - No Children")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+
+# a correlation matrix of our time data, with kids, for work =0
+time_jay %>% 
+  filter(kids=="children") %>% 
+  select(ACT_WORK, ACT_SOCIAL, ACT_TRAVEL, ACT_RELIG) %>% 
+  cor() %>% 
+  ggcorrplot(method="square", lab=TRUE) +
+  theme_bw() +
+  xlab(' ') +
+  ylab(' ') +
+  labs(title = 'Correlation Matrix of Activities - Children',
+       caption = "Figure 41: Correlation Matrix of Activities - Children")  +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.caption = element_text(hjust = 0.5))
+```
+
+We also used a correlation matrix of our time-based variables to understand the numerical association between them. According to Figure 40, among the no children group, there appears a moderate negative relation between work and social minutes, indicating that as minutes in work increase, minutes engaged in social time decrease. We should not be surprised at this based on the example charts from above. Figure 41 illustrates the correlations for the households with children. This group has a slightly lower strength of the possible correlations between our categories.
+
+<hr>
+
+## **Conclusion**
+
+In conclusion, the U.S. citizens allocate their time similarly and differently from each other depending on numerous demographic, geographic, and social factors. Over the last 15 years, from 2004 to 2019, the amount of time spent for religious activities and work-related activities has shown a decreasing trend across all regions in the U.S. Also, Americans are determined to have higher life satisfaction when they can diversify their daily activities. In terms of the physical activities, American's health is not directly correlated to their physical activities itself, but there are other factors, such as nutrition, that are involved. Last but not least, the people who spend more time working tend to spend less time on social activities. In addition, the household spend the similar amount of time on different activities regardless of the presence of children. 
+
+<hr>
+
+## **Personal Contributions**
+
+Our Github repository address is https://github.com/tessamendoza/ds202_project.git.
+
+#### **Jaeyeon Won**
+As a project coordinator, not only did I contribute to the Exploratoy analysis, introduction, and conclusion sections of this paper, but I also supervised the overall project. I joined all team members' individual piecies of work into one final file by removing unnecessary outputs and analysis and revising them with consistent contents, organizations, tones, visual designs. My individual analysis can be found on Github (*Jaeyeon_part.Rmd*) as .html and .Rmd files.
+
+#### **Becca Barrick**
+I contributed to the project by brainstorming themes we could explore and looking into various data sets on Kaggle. After deciding on our topic, I contributed by completing the time usage over time section of our project. I looked into how time spent on religious activities has changed over time, how time spent working has changed over time, and finally how time spent working in each specific region has changed over time. My individual analysis can be found on Github (*beccadata.Rmd*) as .html and .Rmd files. 
+
+#### **Alec Meyer**
+I contributed to the project by exploring data related to how social activities and work relate to life satisfaction. I also viewed how people spending their time would change the way they perceive their life. My individual analysis can be found on Github (*AlecMeyer.Rmd*) as .html and .Rmd files.
+
+#### **Tessa Mendoza**
+I contributed to this project by exploring possible datasets, finding the time use dataset, and extracting the dataset according to the group's data exploration interests. I also created and organized the initial structure of the proposal and report documents. In addition, I completed the analysis for the Health section of the report. My individual analysis can be found on Github (*individual_data_tessa.Rmd*) as .html and .Rmd files.
+
+#### **Jay Maxwell**
+I analyzed the correlations between time spent at work and time spent engaging in other activities. I also examined whether having children has an impact on the time spent engaging in selected activities from our data set. My individual analysis can be found on Github (*jay.Rmd*) as .html and .Rmd files.
+
+<hr>
+
+## **Works Cited**
+
+For more information on BMI:https://www.cdc.gov/obesity/adult/defining.html.
+
+*People*, 3 January. 2019, *SecretNYC*. https://secretnyc.co/new-york-among-states-highest-population-loss-country-study-shows/.

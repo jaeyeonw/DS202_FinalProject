@@ -1,0 +1,146 @@
+---
+title: "AlecMeyerData"
+author: "Alec Meyer"
+date: "11/10/2020"
+output: html_document
+---
+1) Which region in the US has the highest life satisfaction? least?
+2) Which region spends the most time working? 
+3) Which region is the most social? Does this correspond with life satisfaction?
+4) What are the different ways people spend time?
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(ipumsr)
+library(ggthemes)
+```
+
+Load data
+```{r message=FALSE, warning=FALSE}
+time <-read_csv("timeAdjustedAlec.csv")
+```
+
+What are the different ways people spend time?
+```{r message=FALSE, warning=FALSE}
+time1 <- time %>%
+  group_by(WBLADDER, REGION, ACT_FOOD, ACT_PCARE, ACT_RELIG, ACT_SOCIAL, ACT_SPORTS, ACT_TRAVEL, ACT_WORK) %>%
+  summarise(num = n()) %>%
+  filter(WBLADDER != 999) 
+
+time1$WBLADDER <- factor(time1$WBLADDER, labels = c("Worst", "Horrible", "Bad", "Sucks", "Alright", "Fine", "Good", "Great", "Amazing", "Greatest", "Best"))
+time1$REGION <- factor(time1$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_FOOD)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Food")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_SPORTS)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Sports")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_RELIG)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "RELIG")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_SOCIAL)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Social")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_TRAVEL)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Travel")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_WORK)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Work")
+
+ggplot(time1, aes(x = WBLADDER, y = ACT_PCARE)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Personal Care")
+```
+
+```{r message=FALSE, warning=FALSE}
+ggplot(time1, aes(fill = REGION, x = WBLADDER, y = ACT_FOOD)) + geom_bar(stat = "summary", fun.y = "mean", position = "dodge") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Food")
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+time2 <- time %>%
+  group_by(WBLADDER, REGION, ACT_FOOD, ACT_PCARE, ACT_RELIG, ACT_SOCIAL, ACT_SPORTS, ACT_TRAVEL, ACT_WORK) %>%
+  summarise(num = n()) %>%
+  filter(WBLADDER != 999) 
+time2$REGION <- factor(time1$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+
+
+
+```
+
+
+Satisfaction
+```{r}
+states <- map_data('state')
+state_codes <- read.table("https://raw.githubusercontent.com/tessamendoza/ds202_project/main/state_codes.csv", sep = ",", header = TRUE)
+state_codes <- state_codes %>%
+  mutate(STATE = tolower(STATE))
+
+
+ggplot(time2, aes( x = REGION, y = WBLADDER)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Region", y = "Satisfaction", title = "Satisfaction by region") 
+
+
+time3 <- time %>%
+  filter(WBLADDER != 999)
+
+satByState <- time3 %>%
+  group_by(STATEFIP) %>%
+  summarize(avgSat = mean(WBLADDER)) %>%
+  left_join(state_codes, by = c("STATEFIP" = 'STATEFIP'))
+stateMap <- states %>%
+  left_join(satByState, by = c('region' = 'STATE'))
+
+ggplot(stateMap %>% group_by(region), aes(x=long, y=lat, fill = avgSat)) + 
+  geom_polygon(aes(group=group), color = "black") + theme_map() + labs(title = "Average Satisfaction (1-10) By State") +
+  scale_fill_gradient(low='#992222', high="white")
+```
+
+<br />
+Work
+```{r}
+
+time4 <- time %>%
+  filter(ACT_WORK != 0)
+time4$REGION <- factor(time4$REGION, labels = c("Northeast", "Midwest", "South", "West"))
+ggplot(time4, aes( x = REGION, y = ACT_WORK)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Region", y = "Total Minutes", title = "Work")
+
+
+WorkByState <- time4 %>%
+  group_by(STATEFIP) %>%
+  summarize(avgWork = mean(ACT_WORK)) %>%
+  left_join(state_codes, by = c("STATEFIP" = 'STATEFIP'))
+stateMap <- states %>%
+  left_join(WorkByState, by = c('region' = 'STATE'))
+
+ggplot(stateMap %>% group_by(region), aes(x=long, y=lat, fill = avgWork)) + 
+  geom_polygon(aes(group=group), color = "black") + theme_map() + labs(title = "Average Work by state") +
+  scale_fill_gradient(low='white', high="#992222")
+
+#most social
+WorkByState[which.max(WorkByState$avgWork),]
+#least social
+WorkByState[which.min(WorkByState$avgWork),]
+```
+
+<br />
+Social
+```{r}
+time5 <- time 
+
+ggplot(time2, aes( x = REGION, y = ACT_SOCIAL)) + geom_bar(stat = "summary", fun.y = "mean") +   labs(x = "Region", y = "Total Minutes", title = "Social Activites")
+
+
+SocByState <- time5 %>%
+  group_by(STATEFIP) %>%
+  summarize(avgSoc = mean(ACT_SOCIAL)) %>%
+  left_join(state_codes, by = c("STATEFIP" = 'STATEFIP'))
+stateMap <- states %>%
+  left_join(SocByState, by = c('region' = 'STATE'))
+
+ggplot(stateMap %>% group_by(region), aes(x=long, y=lat, fill = avgSoc)) + 
+  geom_polygon(aes(group=group), color = "black") + theme_map() + labs(title = "Average Social Activites By State") +
+  scale_fill_gradient(low='white', high="#992222")
+
+ggplot(time1, aes(fill = REGION, x = WBLADDER, y = ACT_SOCIAL)) + geom_bar(stat = "summary", fun.y = "mean", position = "dodge") +   labs(x = "Satisfaction", y = "Total Minutes", title = "Social Activites by Region")
+
+#most social
+SocByState[which.max(SocByState$avgSoc),]
+#least social
+SocByState[which.min(SocByState$avgSoc),]
+```
+
